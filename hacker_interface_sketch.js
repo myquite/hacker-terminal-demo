@@ -45,7 +45,7 @@ function drawStatusBar() {
   fill(0, 255, 0);
   textSize(12);
   textAlign(LEFT);
-  text("KALI LINUX v2024.1 | TARGET: 192.168.1.0/24 | USER: root | SESSION: " + floor(currentTime/1000), 10, height - 10);
+  text("NEXUS-OS v3.2.1 | TARGET: 192.168.1.0/24 | USER: root | SESSION: " + floor(currentTime/1000), 10, height - 10);
   textAlign(RIGHT);
   text("CPU: " + floor(random(20, 80)) + "% | MEM: " + floor(random(40, 90)) + "% | NET: " + floor(random(1, 100)) + " Mbps", width - 10, height - 10);
   pop();
@@ -246,7 +246,7 @@ function drawVulnerabilityScanner(x, y, w, h) {
   let startY = 35;
   let lineHeight = 10;
   
-  for (let i = 0; i < min(12, scanResults.length); i++) {
+  for (let i = 0; i < min(8, scanResults.length); i++) {
     let result = scanResults[i];
     let yPos = startY + i * lineHeight;
     
@@ -263,16 +263,22 @@ function drawVulnerabilityScanner(x, y, w, h) {
     text(result.banner.substring(0, 25), 200, yPos);
   }
   
-  // Progress bar
-  fill(0, 50, 0);
-  rect(10, h - 40, w - 20, 15);
-  fill(0, 255, 0);
-  rect(10, h - 40, (w - 20) * (frameCount % 100) / 100, 15);
+  // Current scan target
+  let scanProgress = (frameCount / 10) % 100;
+  let currentTarget = "192.168.1." + floor((frameCount / 10) % 255);
+  let currentPort = floor(random(1, 65535));
   
-  // Status
+  // Status and current target
   fill(0, 255, 0);
   textSize(10);
-  text("SCANNING: " + floor((frameCount % 100)) + "% | FOUND: " + scanResults.length + " SERVICES", 10, h - 20);
+  text("SCANNING: " + floor(scanProgress) + "% | TARGET: " + currentTarget + ":" + currentPort, 10, h - 45);
+  text("FOUND: " + scanResults.length + " SERVICES | PORTS: 1-1024", 10, h - 30);
+  
+  // Progress bar below the text
+  fill(0, 50, 0);
+  rect(10, h - 20, w - 20, 12);
+  fill(0, 255, 0);
+  rect(10, h - 20, (w - 20) * scanProgress / 100, 12);
   
   pop();
 }
@@ -390,5 +396,5 @@ function generateTerminalCommand() {
     "dirb http://target.com /usr/share/dirb/wordlists/common.txt",
     "nikto -h http://target.com"
   ];
-  return "root@kali:~# " + random(commands);
+  return "root@nexus:~# " + random(commands);
 }
