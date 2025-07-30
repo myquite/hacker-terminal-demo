@@ -608,24 +608,24 @@ function drawVulnerabilityScanner(x, y, w, h) {
     let result = scanResults[i];
     let yPos = startY + i * lineHeight;
     
-    // Adjusted column widths to fit panel
-    let col1X = 15;    // IP:Port column
-    let col2X = 140;   // Service column (reduced)
-    let col3X = 220;   // Banner column (reduced)
+    // Better distributed column spacing across panel width
+    let col1X = 15;                    // IP:Port column (left)
+    let col2X = w * 0.35;              // Service column (35% of panel width)
+    let col3X = w * 0.65;              // Banner column (65% of panel width)
     
     // IP and port with truncation
     fill(0, 255, 0);
     textAlign(LEFT);
     let ipPort = result.ip + ":" + result.port;
-    if (textWidth(ipPort) > 120) {
-      ipPort = result.ip.substring(0, 8) + "..:" + result.port;
+    if (textWidth(ipPort) > w * 0.25) {
+      ipPort = result.ip.substring(0, 6) + "..:" + result.port;
     }
     text(ipPort, col1X, yPos);
     
     // Service with truncation
     fill(255, 165, 0);
     let service = result.service;
-    if (textWidth(service) > 70) {
+    if (textWidth(service) > w * 0.25) {
       service = service.substring(0, 6) + "..";
     }
     text(service, col2X, yPos);
@@ -633,15 +633,15 @@ function drawVulnerabilityScanner(x, y, w, h) {
     // Version with truncation
     fill(0, 255, 0);
     let version = result.version;
-    if (textWidth(version) > 60) {
+    if (textWidth(version) > w * 0.15) {
       version = version.substring(0, 8) + "..";
     }
-    text(version, col2X + 75, yPos);
+    text(version, col2X + w * 0.15, yPos);
     
     // Banner with truncation
     fill(100, 100, 100);
     let banner = result.banner;
-    if (textWidth(banner) > 150) {
+    if (textWidth(banner) > w * 0.3) {
       banner = banner.substring(0, 15) + "...";
     }
     text(banner, col3X, yPos);
@@ -876,25 +876,25 @@ function drawExploitFramework(x, y, w, h) {
     let exploit = exploitStatus[i];
     let yPos = startY + i * lineHeight;
     
-    // Adjusted column widths to fit panel
-    let col1X = 15;    // Exploit name column
-    let col2X = 160;   // Target column (reduced)
-    let col3X = 240;   // Status column (reduced)
-    let col4X = 320;   // Progress bar column
+    // Better distributed column spacing across panel width
+    let col1X = 15;                    // Exploit name column (left)
+    let col2X = w * 0.25;              // Target column (25% of panel width)
+    let col3X = w * 0.50;              // Status column (50% of panel width)
+    let col4X = w * 0.75;              // Progress bar column (75% of panel width)
     
     // Exploit name with truncation
     fill(0, 255, 0);
     textAlign(LEFT);
     let exploitName = exploit.exploit;
-    if (textWidth(exploitName) > 140) {
-      exploitName = exploitName.substring(0, 12) + "..";
+    if (textWidth(exploitName) > w * 0.2) {
+      exploitName = exploitName.substring(0, 10) + "..";
     }
     text(exploitName, col1X, yPos);
     
     // Target with truncation
     fill(255, 165, 0);
     let target = exploit.target;
-    if (textWidth(target) > 70) {
+    if (textWidth(target) > w * 0.2) {
       target = target.substring(0, 8) + "..";
     }
     text(target, col2X, yPos);
@@ -909,7 +909,7 @@ function drawExploitFramework(x, y, w, h) {
     // Progress bar with better positioning and animation
     if (exploit.status === "RUNNING") {
       fill(0, 50, 0);
-      rect(col4X, yPos - 8, 50, 8);
+      rect(col4X, yPos - 8, w * 0.2, 8);
       
       // Animated progress bar
       let progressColor = color(0, 255, 0);
@@ -917,27 +917,27 @@ function drawExploitFramework(x, y, w, h) {
         progressColor = color(255, 255, 0); // Yellow for near completion
       }
       fill(progressColor);
-      rect(col4X, yPos - 8, 50 * exploit.progress / 100, 8);
+      rect(col4X, yPos - 8, w * 0.2 * exploit.progress / 100, 8);
       
       // Progress percentage
       fill(255, 255, 255);
       textSize(getResponsiveTextSize(8));
-      text(floor(exploit.progress) + "%", col4X + 55, yPos);
+      text(floor(exploit.progress) + "%", col4X + w * 0.2 + 5, yPos);
       
       // Pulsing effect for running exploits
       let pulseSize = 2 + sin(frameCount * 0.2) * 1;
       fill(255, 255, 0, 100);
-      ellipse(col4X + 25, yPos - 4, pulseSize, pulseSize);
+      ellipse(col4X + w * 0.1, yPos - 4, pulseSize, pulseSize);
     } else if (exploit.status === "SUCCESS") {
       // Success indicator
       fill(0, 255, 0);
       textSize(getResponsiveTextSize(8));
-      text("✓", col4X + 20, yPos);
+      text("✓", col4X + w * 0.1, yPos);
     } else if (exploit.status === "FAILED") {
       // Failed indicator
       fill(255, 0, 0);
       textSize(getResponsiveTextSize(8));
-      text("✗", col4X + 20, yPos);
+      text("✗", col4X + w * 0.1, yPos);
     }
   }
   
