@@ -17,13 +17,19 @@ function setup() {
   initNetworkTraffic();
 }
 
+// Calculate responsive text sizes based on window dimensions
+function getResponsiveTextSize(baseSize) {
+  let scaleFactor = min(width / 1200, height / 800); // Base scale on 1200x800
+  return max(baseSize * scaleFactor, baseSize * 0.8); // Minimum 80% of original size
+}
+
 function draw() {
   background(0);
   currentTime = millis();
   
   // Calculate grid layout - account for status bar height
-  let margin = 10;
-  let statusBarHeight = 30;
+  let margin = 15;
+  let statusBarHeight = 40;
   let availableHeight = height - statusBarHeight - 3 * margin;
   let w = (width - 3 * margin) / 2;
   let h = availableHeight / 2;
@@ -41,13 +47,19 @@ function draw() {
 function drawStatusBar() {
   push();
   fill(0, 50, 0);
-  rect(0, height - 30, width, 30);
+  rect(0, height - 40, width, 40);
   fill(0, 255, 0);
-  textSize(12);
+  textSize(getResponsiveTextSize(16));
   textAlign(LEFT);
-  text("NEXUS-OS v3.2.1 | TARGET: 192.168.1.0/24 | USER: root | SESSION: " + floor(currentTime/1000), 10, height - 10);
+  text("NEXUS-OS v3.2.1 | TARGET: 192.168.1.0/24 | USER: root | SESSION: " + floor(currentTime/1000), 15, height - 15);
   textAlign(RIGHT);
-  text("CPU: " + floor(random(20, 80)) + "% | MEM: " + floor(random(40, 90)) + "% | NET: " + floor(random(1, 100)) + " Mbps", width - 10, height - 10);
+  
+  // More realistic system readings with much slower changes
+  let cpuUsage = 18 + sin(frameCount * 0.001) * 5 + random(-1, 1); // 18-23% with very slow variation
+  let memUsage = 52 + sin(frameCount * 0.0005) * 8 + random(-2, 2); // 52-60% with very slow variation
+  let netSpeed = 16 + sin(frameCount * 0.002) * 4 + random(-0.5, 0.5); // 16-20 Mbps with very slow variation
+  
+  text("CPU: " + floor(cpuUsage) + "% | MEM: " + floor(memUsage) + "% | NET: " + floor(netSpeed) + " Mbps", width - 15, height - 15);
   pop();
 }
 
@@ -128,11 +140,18 @@ function drawNetworkMap(x, y, w, h) {
   noFill();
   rect(0, 0, w, h);
   
-  // Title
+  // Title with better spacing
   fill(0, 255, 0);
-  textSize(14);
+  textSize(getResponsiveTextSize(18));
   textAlign(CENTER);
-  text("NETWORK TOPOLOGY", w/2, 20);
+  text("NETWORK TOPOLOGY", w/2, 30);
+  textAlign(LEFT);
+  
+  // Subtitle
+  fill(0, 150, 0);
+  textSize(getResponsiveTextSize(10));
+  textAlign(CENTER);
+  text("ACTIVE NODES: " + nodes.length + " | SCAN STATUS: ACTIVE", w/2, 45);
   textAlign(LEFT);
   
   // Draw nodes
@@ -142,6 +161,12 @@ function drawNetworkMap(x, y, w, h) {
     let nodeX = n.x * w;
     let nodeY = n.y * h;
     
+    // Check if node is within panel bounds (with margin for text)
+    let margin = 80;
+    if (nodeX < margin || nodeX > w - margin || nodeY < margin || nodeY > h - margin) {
+      continue; // Skip nodes outside the panel
+    }
+    
     let nodeColor = n.status === "ACTIVE" ? color(0, 255, 0) : 
                 n.status === "VULNERABLE" ? color(255, 165, 0) : 
                 color(255, 0, 0);
@@ -150,29 +175,48 @@ function drawNetworkMap(x, y, w, h) {
     noStroke();
     ellipse(nodeX, nodeY, 6, 6);
     
-    // Draw connections
+    // Draw connections (only if both nodes are within bounds)
     stroke(0, 100, 0);
     strokeWeight(1);
     for (let j = 0; j < 3; j++) {
       let target = nodes[(i + j + 1) % nodes.length];
       let targetX = target.x * w;
       let targetY = target.y * h;
-      line(nodeX, nodeY, targetX, targetY);
+      
+      // Only draw connection if target is also within bounds
+      if (targetX >= margin && targetX <= w - margin && targetY >= margin && targetY <= h - margin) {
+        line(nodeX, nodeY, targetX, targetY);
+      }
     }
     
-    // Node info
+    // Node info with better layout
     fill(0, 255, 0);
-    textSize(8);
-    text(n.ip, nodeX + 8, nodeY - 2);
-    text(n.os, nodeX + 8, nodeY + 8);
+    textSize(getResponsiveTextSize(10));
+    textAlign(LEFT);
+    text(n.ip, nodeX + 12, nodeY - 4);
+    
+    fill(0, 200, 0);
+    textSize(getResponsiveTextSize(8));
+    text(n.os, nodeX + 12, nodeY + 8);
   }
   
-  // Legend
+  // Legend with better layout
   fill(0, 255, 0);
-  textSize(10);
-  text("ACTIVE: " + nodes.filter(n => n.status === "ACTIVE").length, 10, h - 60);
-  text("VULNERABLE: " + nodes.filter(n => n.status === "VULNERABLE").length, 10, h - 45);
-  text("COMPROMISED: " + nodes.filter(n => n.status === "COMPROMISED").length, 10, h - 30);
+  textSize(getResponsiveTextSize(12));
+  textAlign(LEFT);
+  
+  // Status summary
+  let activeCount = nodes.filter(n => n.status === "ACTIVE").length;
+  let vulnerableCount = nodes.filter(n => n.status === "VULNERABLE").length;
+  let compromisedCount = nodes.filter(n => n.status === "COMPROMISED").length;
+  
+  text("STATUS SUMMARY:", 15, h - 90);
+  fill(0, 255, 0);
+  text("• ACTIVE: " + activeCount, 25, h - 70);
+  fill(255, 165, 0);
+  text("• VULNERABLE: " + vulnerableCount, 25, h - 50);
+  fill(255, 0, 0);
+  text("• COMPROMISED: " + compromisedCount, 25, h - 30);
   
   pop();
 }
@@ -189,18 +233,25 @@ function drawTerminal(x, y, w, h) {
   noFill();
   rect(0, 0, w, h);
   
-  // Title
+  // Title with better spacing
   fill(0, 255, 0);
-  textSize(14);
+  textSize(getResponsiveTextSize(18));
   textAlign(CENTER);
-  text("TERMINAL SESSION", w/2, 20);
+  text("TERMINAL SESSION", w/2, 30);
+  textAlign(LEFT);
+  
+  // Session info
+  fill(0, 150, 0);
+  textSize(getResponsiveTextSize(10));
+  textAlign(CENTER);
+  text("SESSION: " + floor(currentTime/1000) + "s | COMMANDS: " + terminalLog.length, w/2, 45);
   textAlign(LEFT);
   
   // Terminal content
   fill(0, 255, 0);
-  textSize(10);
-  let startY = 35;
-  let lineHeight = 12;
+  textSize(getResponsiveTextSize(12));
+  let startY = 75;
+  let lineHeight = 18;
   
   // Add realistic terminal output
   if (frameCount % 30 === 0) {
@@ -233,34 +284,52 @@ function drawVulnerabilityScanner(x, y, w, h) {
   noFill();
   rect(0, 0, w, h);
   
-  // Title
+  // Title with better spacing
   fill(0, 255, 0);
-  textSize(14);
+  textSize(getResponsiveTextSize(18));
   textAlign(CENTER);
-  text("VULNERABILITY SCANNER", w/2, 20);
+  text("VULNERABILITY SCANNER", w/2, 30);
+  textAlign(LEFT);
+  
+  // Scanner status
+  fill(0, 150, 0);
+  textSize(getResponsiveTextSize(10));
+  textAlign(CENTER);
+  text("SCAN RANGE: 1-1024 | PROTOCOLS: TCP/UDP", w/2, 45);
   textAlign(LEFT);
   
   // Scan results
   fill(0, 255, 0);
-  textSize(9);
-  let startY = 35;
-  let lineHeight = 10;
+  textSize(getResponsiveTextSize(11));
+  let startY = 75;
+  let lineHeight = 16;
   
   for (let i = 0; i < min(8, scanResults.length); i++) {
     let result = scanResults[i];
     let yPos = startY + i * lineHeight;
     
-    // IP and port
+    // Fixed column widths with proper spacing
+    let col1X = 15;    // IP:Port column
+    let col2X = 180;   // Service column (more space)
+    let col3X = 320;   // Banner column (more space)
+    
+    // IP and port with fixed width
     fill(0, 255, 0);
-    text(result.ip + ":" + result.port, 10, yPos);
+    textAlign(LEFT);
+    let ipPort = result.ip + ":" + result.port;
+    text(ipPort, col1X, yPos);
     
-    // Service and version
+    // Service and version with proper spacing
     fill(255, 165, 0);
-    text(result.service + " " + result.version, 120, yPos);
+    text(result.service, col2X, yPos);
     
-    // Banner
+    fill(0, 255, 0);
+    text(result.version, col2X + textWidth(result.service) + 8, yPos);
+    
+    // Banner with truncation and fixed width
     fill(100, 100, 100);
-    text(result.banner.substring(0, 25), 200, yPos);
+    let banner = result.banner.length > 20 ? result.banner.substring(0, 20) + "..." : result.banner;
+    text(banner, col3X, yPos);
   }
   
   // Current scan target
@@ -268,17 +337,20 @@ function drawVulnerabilityScanner(x, y, w, h) {
   let currentTarget = "192.168.1." + floor((frameCount / 10) % 255);
   let currentPort = floor(random(1, 65535));
   
-  // Status and current target
+  // Status and current target with better layout
   fill(0, 255, 0);
-  textSize(10);
-  text("SCANNING: " + floor(scanProgress) + "% | TARGET: " + currentTarget + ":" + currentPort, 10, h - 45);
-  text("FOUND: " + scanResults.length + " SERVICES | PORTS: 1-1024", 10, h - 30);
+  textSize(getResponsiveTextSize(12));
+  textAlign(LEFT);
+  
+  // Progress info
+  text("SCANNING: " + floor(scanProgress) + "% | TARGET: " + currentTarget + ":" + currentPort, 15, h - 55);
+  text("FOUND: " + scanResults.length + " SERVICES | PORTS: 1-1024", 15, h - 35);
   
   // Progress bar below the text
   fill(0, 50, 0);
-  rect(10, h - 20, w - 20, 12);
+  rect(15, h - 25, w - 30, 12);
   fill(0, 255, 0);
-  rect(10, h - 20, (w - 20) * scanProgress / 100, 12);
+  rect(15, h - 25, (w - 30) * scanProgress / 100, 12);
   
   pop();
 }
@@ -295,52 +367,80 @@ function drawExploitFramework(x, y, w, h) {
   noFill();
   rect(0, 0, w, h);
   
-  // Title
+  // Title with better spacing
   fill(0, 255, 0);
-  textSize(14);
+  textSize(getResponsiveTextSize(18));
   textAlign(CENTER);
-  text("EXPLOIT FRAMEWORK", w/2, 20);
+  text("EXPLOIT FRAMEWORK", w/2, 30);
+  textAlign(LEFT);
+  
+  // Framework status
+  fill(0, 150, 0);
+  textSize(getResponsiveTextSize(10));
+  textAlign(CENTER);
+  text("EXPLOITS: " + exploitStatus.length + " | ACTIVE: " + exploitStatus.filter(e => e.status === "RUNNING").length, w/2, 45);
   textAlign(LEFT);
   
   // Exploit status
   fill(0, 255, 0);
-  textSize(9);
-  let startY = 35;
-  let lineHeight = 12;
+  textSize(getResponsiveTextSize(11));
+  let startY = 75;
+  let lineHeight = 18;
   
   for (let i = 0; i < min(8, exploitStatus.length); i++) {
     let exploit = exploitStatus[i];
     let yPos = startY + i * lineHeight;
     
-    // Exploit name
+    // Fixed column widths with proper spacing
+    let col1X = 15;    // Exploit name column
+    let col2X = 200;   // Target column (more space)
+    let col3X = 320;   // Status column (more space)
+    let col4X = 420;   // Progress bar column
+    
+    // Exploit name with fixed width
     fill(0, 255, 0);
-    text(exploit.exploit, 10, yPos);
+    textAlign(LEFT);
+    text(exploit.exploit, col1X, yPos);
     
-    // Target
+    // Target with fixed width
     fill(255, 165, 0);
-    text(exploit.target, 150, yPos);
+    text(exploit.target, col2X, yPos);
     
-    // Status
+    // Status with better alignment
     let statusColor = exploit.status === "SUCCESS" ? color(0, 255, 0) :
                      exploit.status === "RUNNING" ? color(255, 165, 0) :
                      exploit.status === "FAILED" ? color(255, 0, 0) : color(100, 100, 100);
     fill(statusColor);
-    text(exploit.status, 220, yPos);
+    text(exploit.status, col3X, yPos);
     
-    // Progress bar
+    // Progress bar with better positioning
     if (exploit.status === "RUNNING") {
       fill(0, 50, 0);
-      rect(280, yPos - 8, 60, 6);
+      rect(col4X, yPos - 8, 60, 8);
       fill(0, 255, 0);
-      rect(280, yPos - 8, 60 * exploit.progress / 100, 6);
+      rect(col4X, yPos - 8, 60 * exploit.progress / 100, 8);
     }
   }
   
-  // Summary
+  // Summary with better layout
   fill(0, 255, 0);
-  textSize(10);
-  text("ACTIVE: " + exploitStatus.filter(e => e.status === "RUNNING").length, 10, h - 30);
-  text("SUCCESS: " + exploitStatus.filter(e => e.status === "SUCCESS").length, 10, h - 15);
+  textSize(getResponsiveTextSize(12));
+  textAlign(LEFT);
+  
+  // Summary header
+  text("EXPLOIT SUMMARY:", 15, h - 70);
+  
+  // Summary details with color coding
+  let runningCount = exploitStatus.filter(e => e.status === "RUNNING").length;
+  let successCount = exploitStatus.filter(e => e.status === "SUCCESS").length;
+  let failedCount = exploitStatus.filter(e => e.status === "FAILED").length;
+  
+  fill(255, 165, 0);
+  text("• RUNNING: " + runningCount, 25, h - 50);
+  fill(0, 255, 0);
+  text("• SUCCESS: " + successCount, 25, h - 35);
+  fill(255, 0, 0);
+  text("• FAILED: " + failedCount, 25, h - 20);
   
   pop();
 }
