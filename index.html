@@ -2,30 +2,23 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-  <meta charset="UTF-8">
-  <title>NEXUS-OS - Advanced Penetration Testing Interface</title>
-  <link rel="stylesheet" href="styles.css">
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Hacker Interface - Coordinated Attack System</title>
+    <style>
+        body {
+            margin: 0;
+            padding: 0;
+            background: #000;
+            font-family: 'Courier New', monospace;
+        }
+        canvas {
+            display: block;
+        }
+    </style>
 </head>
 <body>
-      <div id="loading">
-      <div>
-        <h1>NEXUS-OS</h1>
-        <div class="loading-text">
-          <span class="blink">█</span> Initializing advanced penetration testing interface...
-        </div>
-      </div>
-    </div>
-  
-  <script src="https://cdnjs.cloudflare.com/ajax/libs/p5.js/1.9.0/p5.min.js"></script>
-  <script src="hacker_interface_sketch.js"></script>
-  
-  <script>
-    // Hide loading screen when sketch is ready
-    window.addEventListener('load', function() {
-      setTimeout(function() {
-        document.getElementById('loading').style.display = 'none';
-      }, 2000);
-    });
-  </script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/p5.js/1.7.0/p5.min.js"></script>
+    <script src="hacker_interface_sketch.js"></script>
 </body>
 </html>
