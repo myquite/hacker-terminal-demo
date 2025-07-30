@@ -4,69 +4,7 @@
 <head>
   <meta charset="UTF-8">
   <title>NEXUS-OS - Advanced Penetration Testing Interface</title>
-  <style>
-    body {
-      margin: 0;
-      overflow: hidden;
-      background: #000;
-      color: #0f0;
-      font-family: 'Courier New', monospace;
-      cursor: crosshair;
-    }
-    
-    /* Custom scrollbar for webkit browsers */
-    ::-webkit-scrollbar {
-      width: 8px;
-    }
-    
-    ::-webkit-scrollbar-track {
-      background: #001100;
-    }
-    
-    ::-webkit-scrollbar-thumb {
-      background: #0f0;
-      border-radius: 4px;
-    }
-    
-    ::-webkit-scrollbar-thumb:hover {
-      background: #00ff00;
-    }
-    
-    /* Loading screen */
-    #loading {
-      position: fixed;
-      top: 0;
-      left: 0;
-      width: 100%;
-      height: 100%;
-      background: #000;
-      display: flex;
-      justify-content: center;
-      align-items: center;
-      z-index: 1000;
-    }
-    
-    #loading h1 {
-      color: #0f0;
-      font-size: 2em;
-      text-align: center;
-    }
-    
-    #loading .loading-text {
-      color: #0f0;
-      font-size: 1.2em;
-      margin-top: 20px;
-    }
-    
-    .blink {
-      animation: blink 1s infinite;
-    }
-    
-    @keyframes blink {
-      0%, 50% { opacity: 1; }
-      51%, 100% { opacity: 0; }
-    }
-  </style>
+  <link rel="stylesheet" href="styles.css">
 </head>
 <body>
       <div id="loading">
