@@ -19,6 +19,15 @@ let attackSequence = {
   attackInProgress: false
 };
 
+// Shared data for cross-panel coordination
+let sharedAttackData = {
+  currentTarget: null,
+  discoveredVulnerabilities: [],
+  successfulExploits: [],
+  networkChanges: [],
+  lastUpdate: 0
+};
+
 // Attack phases
 const PHASES = {
   TARGET_SELECTION: 0,
@@ -148,7 +157,9 @@ function initExploitStatus() {
       exploit: random(exploits),
       target: randomIP(),
       status: random(["PENDING", "RUNNING", "SUCCESS", "FAILED"]),
-      progress: random(0, 100)
+      progress: random(0, 100),
+      startTime: random() < 0.3 ? currentTime - random(1000, 5000) : null,
+      estimatedDuration: random(2000, 8000)
     });
   }
 }
@@ -167,24 +178,21 @@ function initNetworkTraffic() {
 }
 
 function initAttackSequence() {
-  // Define a sequence of targets for the attack
-  attackSequence.targets = [
-    "192.168.1.10",
-    "192.168.1.20",
-    "192.168.1.30",
-    "192.168.1.40",
-    "192.168.1.50"
-  ];
+  // Use actual node IPs from the network topology
+  attackSequence.targets = nodes.map(n => n.ip);
   attackSequence.currentPhase = PHASES.TARGET_SELECTION;
   attackSequence.phaseTimer = 0;
   attackSequence.attackInProgress = true;
+  attackSequence.currentTargetIndex = 0;
+  attackSequence.currentTarget = attackSequence.targets[0]; // Set initial target
 }
 
 function restartAttackSequence() {
   attackSequence.currentPhase = PHASES.TARGET_SELECTION;
   attackSequence.phaseTimer = 0;
   attackSequence.attackInProgress = true;
-  attackSequence.currentTarget = null;
+  attackSequence.currentTargetIndex = (attackSequence.currentTargetIndex + 1) % attackSequence.targets.length;
+  attackSequence.currentTarget = attackSequence.targets[attackSequence.currentTargetIndex];
 }
 
 function updateAttackSequence() {
@@ -206,7 +214,9 @@ function updateAttackSequence() {
 
     switch (attackSequence.currentPhase) {
       case PHASES.TARGET_SELECTION:
-        attackSequence.currentTarget = attackSequence.targets[floor(random(attackSequence.targets.length))];
+        attackSequence.currentTarget = attackSequence.targets[attackSequence.currentTargetIndex];
+        sharedAttackData.currentTarget = attackSequence.currentTarget;
+        sharedAttackData.lastUpdate = currentTime;
         console.log("Phase: Target Selection, Target: " + attackSequence.currentTarget);
         break;
       case PHASES.TERMINAL_COMMAND:
@@ -215,15 +225,30 @@ function updateAttackSequence() {
         console.log("Phase: Terminal Command, Command: " + terminalLog[terminalLog.length - 1]);
         break;
       case PHASES.NETWORK_HIGHLIGHT:
-        // Logic to highlight network nodes or traffic
+        // Update shared data for network changes
+        sharedAttackData.networkChanges.push({
+          target: attackSequence.currentTarget,
+          type: "TARGET_ACQUIRED",
+          timestamp: currentTime
+        });
         console.log("Phase: Network Highlight");
         break;
       case PHASES.VULNERABILITY_SCAN:
-        // Logic to trigger vulnerability scanning
+        // Add discovered vulnerabilities to shared data
+        sharedAttackData.discoveredVulnerabilities.push({
+          target: attackSequence.currentTarget,
+          vulnerability: random(["CVE-2021-44228", "CVE-2021-34527", "CVE-2020-1472"]),
+          timestamp: currentTime
+        });
         console.log("Phase: Vulnerability Scan");
         break;
       case PHASES.EXPLOIT_EXECUTION:
-        // Logic to trigger exploit execution
+        // Track successful exploits in shared data
+        sharedAttackData.successfulExploits.push({
+          target: attackSequence.currentTarget,
+          exploit: random(["CVE-2021-44228", "CVE-2021-34527", "CVE-2020-1472"]),
+          timestamp: currentTime
+        });
         console.log("Phase: Exploit Execution");
         break;
     }
@@ -325,6 +350,25 @@ function drawNetworkMap(x, y, w, h) {
       }
     }
     
+    // Show attack progression through nodes
+    if (attackSequence.attackInProgress) {
+      let targetIndex = attackSequence.targets.indexOf(n.ip);
+      if (targetIndex !== -1) {
+        // Show which nodes have been processed
+        if (targetIndex < attackSequence.currentTargetIndex) {
+          // Already processed nodes
+          fill(0, 100, 0, 100);
+          ellipse(nodeX, nodeY, 8, 8);
+        } else if (targetIndex === attackSequence.currentTargetIndex) {
+          // Current target (highlighted above)
+        } else {
+          // Upcoming targets
+          fill(100, 100, 100, 50);
+          ellipse(nodeX, nodeY, 4, 4);
+        }
+      }
+    }
+    
     fill(nodeColor);
     noStroke();
     ellipse(nodeX, nodeY, 6, 6);
@@ -343,15 +387,23 @@ function drawNetworkMap(x, y, w, h) {
       }
     }
     
-    // Node info with better layout
+    // Node info with better layout and truncation
     fill(0, 255, 0);
     textSize(getResponsiveTextSize(10));
     textAlign(LEFT);
-    text(n.ip, nodeX + 12, nodeY - 4);
+    let ipText = n.ip;
+    if (textWidth(ipText) > 80) {
+      ipText = n.ip.substring(0, 8) + "..";
+    }
+    text(ipText, nodeX + 12, nodeY - 4);
     
     fill(0, 200, 0);
     textSize(getResponsiveTextSize(8));
-    text(n.os, nodeX + 12, nodeY + 8);
+    let osText = n.os;
+    if (textWidth(osText) > 60) {
+      osText = n.os.substring(0, 6) + "..";
+    }
+    text(osText, nodeX + 12, nodeY + 8);
   }
   
 
@@ -455,7 +507,7 @@ function drawTerminal(x, y, w, h) {
     if (terminalLog.length > 15) terminalLog.shift();
   }
   
-  // Show attack sequence commands
+  // Show attack sequence commands with cross-panel coordination
   if (attackSequence.attackInProgress && attackSequence.currentPhase === PHASES.TERMINAL_COMMAND) {
     let attackCommands = [
       "nmap -sS -p- " + attackSequence.currentTarget,
@@ -473,8 +525,42 @@ function drawTerminal(x, y, w, h) {
     }
   }
   
+  // Cross-panel coordination: Show commands that affect other panels
+  if (attackSequence.attackInProgress && attackSequence.currentTarget) {
+    let phaseCommands = {
+      [PHASES.TARGET_SELECTION]: [
+        "ping -c 4 " + attackSequence.currentTarget,
+        "arp -a | grep " + attackSequence.currentTarget,
+        "nslookup " + attackSequence.currentTarget
+      ],
+      [PHASES.VULNERABILITY_SCAN]: [
+        "nmap -sV -sC " + attackSequence.currentTarget,
+        "nikto -h http://" + attackSequence.currentTarget,
+        "dirb http://" + attackSequence.currentTarget + " /usr/share/dirb/wordlists/common.txt"
+      ],
+      [PHASES.EXPLOIT_EXECUTION]: [
+        "msfconsole -q -x 'use exploit/windows/smb/ms17_010_eternalblue; set RHOSTS " + attackSequence.currentTarget + "; exploit'",
+        "hydra -l admin -P /usr/share/wordlists/rockyou.txt ssh://" + attackSequence.currentTarget,
+        "sqlmap -u http://" + attackSequence.currentTarget + "/login.php --dbs --batch"
+      ]
+    };
+    
+    if (phaseCommands[attackSequence.currentPhase] && frameCount % 45 === 0) {
+      let command = "root@nexus:~# " + random(phaseCommands[attackSequence.currentPhase]);
+      if (!terminalLog.includes(command)) {
+        terminalLog.push(command);
+        if (terminalLog.length > 15) terminalLog.shift();
+      }
+    }
+  }
+  
   for (let i = 0; i < terminalLog.length; i++) {
-    text(terminalLog[i], 10, startY + i * lineHeight);
+    let command = terminalLog[i];
+    // Truncate long commands to fit panel width
+    if (textWidth(command) > w - 20) {
+      command = command.substring(0, Math.floor((w - 20) / 8)) + "...";
+    }
+    text(command, 10, startY + i * lineHeight);
   }
   
   // Cursor
@@ -522,27 +608,42 @@ function drawVulnerabilityScanner(x, y, w, h) {
     let result = scanResults[i];
     let yPos = startY + i * lineHeight;
     
-    // Fixed column widths with proper spacing
+    // Adjusted column widths to fit panel
     let col1X = 15;    // IP:Port column
-    let col2X = 180;   // Service column (more space)
-    let col3X = 320;   // Banner column (more space)
+    let col2X = 140;   // Service column (reduced)
+    let col3X = 220;   // Banner column (reduced)
     
-    // IP and port with fixed width
+    // IP and port with truncation
     fill(0, 255, 0);
     textAlign(LEFT);
     let ipPort = result.ip + ":" + result.port;
+    if (textWidth(ipPort) > 120) {
+      ipPort = result.ip.substring(0, 8) + "..:" + result.port;
+    }
     text(ipPort, col1X, yPos);
     
-    // Service and version with proper spacing
+    // Service with truncation
     fill(255, 165, 0);
-    text(result.service, col2X, yPos);
+    let service = result.service;
+    if (textWidth(service) > 70) {
+      service = service.substring(0, 6) + "..";
+    }
+    text(service, col2X, yPos);
     
+    // Version with truncation
     fill(0, 255, 0);
-    text(result.version, col2X + textWidth(result.service) + 8, yPos);
+    let version = result.version;
+    if (textWidth(version) > 60) {
+      version = version.substring(0, 8) + "..";
+    }
+    text(version, col2X + 75, yPos);
     
-    // Banner with truncation and fixed width
+    // Banner with truncation
     fill(100, 100, 100);
-    let banner = result.banner.length > 20 ? result.banner.substring(0, 20) + "..." : result.banner;
+    let banner = result.banner;
+    if (textWidth(banner) > 150) {
+      banner = banner.substring(0, 15) + "...";
+    }
     text(banner, col3X, yPos);
   }
   
@@ -570,6 +671,66 @@ function drawVulnerabilityScanner(x, y, w, h) {
     }
   }
   
+  // Focus scanner on current target node
+  if (attackSequence.attackInProgress && attackSequence.currentTarget) {
+    let targetNode = nodes.find(n => n.ip === attackSequence.currentTarget);
+    if (targetNode) {
+      // Show target-specific scan results
+      if (frameCount % 20 === 0) {
+        let targetServices = {
+          "Linux 4.19": ["SSH", "HTTP", "HTTPS", "MySQL"],
+          "Windows 10": ["RDP", "SMB", "HTTP", "VNC"],
+          "Ubuntu 20.04": ["SSH", "HTTP", "HTTPS", "PostgreSQL"],
+          "CentOS 7": ["SSH", "HTTP", "FTP", "MySQL"],
+          "Debian 11": ["SSH", "HTTP", "DNS", "PostgreSQL"],
+          "FreeBSD 13": ["SSH", "HTTP", "FTP", "VNC"]
+        };
+        
+        let osServices = targetServices[targetNode.os] || ["SSH", "HTTP"];
+        let service = random(osServices);
+        let port = service === "SSH" ? 22 : service === "HTTP" ? 80 : service === "HTTPS" ? 443 : floor(random(1, 65535));
+        
+        let newResult = {
+          ip: attackSequence.currentTarget,
+          port: port,
+          service: service,
+          version: targetNode.os,
+          banner: service + " service on " + targetNode.os
+        };
+        scanResults.unshift(newResult);
+        if (scanResults.length > 20) scanResults.pop();
+      }
+    }
+  }
+  
+  // Cross-panel coordination: Show scan results that match exploit targets
+  if (attackSequence.attackInProgress && attackSequence.currentTarget) {
+    let targetExploits = exploitStatus.filter(e => e.target === attackSequence.currentTarget);
+    if (targetExploits.length > 0 && frameCount % 20 === 0) {
+      let exploit = targetExploits[0];
+      let vulnerableServices = {
+        "CVE-2021-44228": { service: "HTTP", port: 8080, version: "Log4j 2.14.1" },
+        "CVE-2021-34527": { service: "RDP", port: 3389, version: "Windows 10" },
+        "CVE-2020-1472": { service: "SMB", port: 445, version: "Windows Server" },
+        "CVE-2019-0708": { service: "RDP", port: 3389, version: "Windows 7" },
+        "CVE-2018-7600": { service: "HTTP", port: 80, version: "Drupal 7.58" }
+      };
+      
+      if (vulnerableServices[exploit.exploit]) {
+        let vulnService = vulnerableServices[exploit.exploit];
+        let newResult = {
+          ip: attackSequence.currentTarget,
+          port: vulnService.port,
+          service: vulnService.service,
+          version: vulnService.version,
+          banner: "VULNERABLE: " + exploit.exploit
+        };
+        scanResults.unshift(newResult);
+        if (scanResults.length > 20) scanResults.pop();
+      }
+    }
+  }
+  
   // Status and current target with better layout
   fill(0, 255, 0);
   textSize(getResponsiveTextSize(12));
@@ -592,7 +753,7 @@ function drawExploitFramework(x, y, w, h) {
   push();
   translate(x, y);
   
-  // Background
+  // Background with dynamic effect
   fill(0, 20, 0);
   rect(0, 0, w, h);
   stroke(0, 100, 0);
@@ -600,18 +761,35 @@ function drawExploitFramework(x, y, w, h) {
   noFill();
   rect(0, 0, w, h);
   
-  // Title with better spacing
-  fill(0, 255, 0);
+  // Animated background pattern for active exploits
+  let runningExploits = exploitStatus.filter(e => e.status === "RUNNING").length;
+  if (runningExploits > 0) {
+    for (let i = 0; i < runningExploits * 2; i++) {
+      let xPos = (frameCount * 0.5 + i * 50) % (w + 100) - 50;
+      let yPos = 20 + (i * 30) % (h - 40);
+      fill(0, 255, 0, 20);
+      noStroke();
+      ellipse(xPos, yPos, 4, 4);
+    }
+  }
+  
+  // Title with pulsing effect when exploits are running
+  if (runningExploits > 0) {
+    let pulseIntensity = sin(frameCount * 0.1) * 50;
+    fill(0, 255 + pulseIntensity, 0);
+  } else {
+    fill(0, 255, 0);
+  }
   textSize(getResponsiveTextSize(18));
   textAlign(CENTER);
   text("EXPLOIT FRAMEWORK", w/2, 30);
   textAlign(LEFT);
   
-  // Framework status
+  // Framework status with dynamic counter
   fill(0, 150, 0);
   textSize(getResponsiveTextSize(10));
   textAlign(CENTER);
-  text("EXPLOITS: " + exploitStatus.length + " | ACTIVE: " + exploitStatus.filter(e => e.status === "RUNNING").length, w/2, 45);
+  text("EXPLOITS: " + exploitStatus.length + " | ACTIVE: " + runningExploits + " | SUCCESS: " + exploitStatus.filter(e => e.status === "SUCCESS").length, w/2, 45);
   textAlign(LEFT);
   
   // Exploit status
@@ -628,10 +806,69 @@ function drawExploitFramework(x, y, w, h) {
         exploit: random(["CVE-2021-44228", "CVE-2021-34527", "CVE-2020-1472", "CVE-2019-0708", "CVE-2018-7600"]),
         target: attackSequence.currentTarget,
         status: "RUNNING",
-        progress: (attackSequence.phaseTimer / attackSequence.phaseDuration) * 100
+        progress: (attackSequence.phaseTimer / attackSequence.phaseDuration) * 100,
+        startTime: currentTime,
+        estimatedDuration: random(2000, 8000)
       };
       exploitStatus.unshift(newExploit);
       if (exploitStatus.length > 10) exploitStatus.pop();
+    }
+  }
+  
+  // Focus exploits on current target node
+  if (attackSequence.attackInProgress && attackSequence.currentTarget) {
+    let targetNode = nodes.find(n => n.ip === attackSequence.currentTarget);
+    if (targetNode && frameCount % 45 === 0) {
+      // OS-specific exploits
+      let osExploits = {
+        "Linux 4.19": ["CVE-2021-44228", "CVE-2021-34527", "CVE-2018-7600"],
+        "Windows 10": ["CVE-2020-1472", "CVE-2019-0708", "CVE-2021-34527"],
+        "Ubuntu 20.04": ["CVE-2021-44228", "CVE-2018-7600"],
+        "CentOS 7": ["CVE-2021-44228", "CVE-2018-7600"],
+        "Debian 11": ["CVE-2021-44228", "CVE-2018-7600"],
+        "FreeBSD 13": ["CVE-2021-44228", "CVE-2018-7600"]
+      };
+      
+      let availableExploits = osExploits[targetNode.os] || ["CVE-2021-44228"];
+      let exploit = random(availableExploits);
+      
+      let newExploit = {
+        exploit: exploit,
+        target: attackSequence.currentTarget,
+        status: "RUNNING",
+        progress: 0,
+        startTime: currentTime,
+        estimatedDuration: random(3000, 10000)
+      };
+      exploitStatus.unshift(newExploit);
+      if (exploitStatus.length > 10) exploitStatus.pop();
+    }
+  }
+  
+  // Cross-panel coordination: Update node status based on exploit results
+  if (attackSequence.attackInProgress && attackSequence.currentTarget) {
+    let targetNode = nodes.find(n => n.ip === attackSequence.currentTarget);
+    if (targetNode) {
+      let successfulExploits = exploitStatus.filter(e => e.target === attackSequence.currentTarget && e.status === "SUCCESS").length;
+      if (successfulExploits > 0 && targetNode.status !== "COMPROMISED") {
+        targetNode.status = "COMPROMISED";
+      } else if (attackSequence.currentPhase >= PHASES.VULNERABILITY_SCAN && targetNode.status === "ACTIVE") {
+        targetNode.status = "VULNERABLE";
+      }
+    }
+  }
+  
+  // Update exploit progress dynamically
+  for (let exploit of exploitStatus) {
+    if (exploit.status === "RUNNING" && exploit.startTime) {
+      let elapsed = currentTime - exploit.startTime;
+      exploit.progress = min((elapsed / exploit.estimatedDuration) * 100, 100);
+      
+      // Randomly complete exploits
+      if (exploit.progress >= 100 && random() < 0.1) {
+        exploit.status = random() < 0.7 ? "SUCCESS" : "FAILED";
+        exploit.progress = 100;
+      }
     }
   }
   
@@ -639,20 +876,28 @@ function drawExploitFramework(x, y, w, h) {
     let exploit = exploitStatus[i];
     let yPos = startY + i * lineHeight;
     
-    // Fixed column widths with proper spacing
+    // Adjusted column widths to fit panel
     let col1X = 15;    // Exploit name column
-    let col2X = 200;   // Target column (more space)
-    let col3X = 320;   // Status column (more space)
-    let col4X = 420;   // Progress bar column
+    let col2X = 160;   // Target column (reduced)
+    let col3X = 240;   // Status column (reduced)
+    let col4X = 320;   // Progress bar column
     
-    // Exploit name with fixed width
+    // Exploit name with truncation
     fill(0, 255, 0);
     textAlign(LEFT);
-    text(exploit.exploit, col1X, yPos);
+    let exploitName = exploit.exploit;
+    if (textWidth(exploitName) > 140) {
+      exploitName = exploitName.substring(0, 12) + "..";
+    }
+    text(exploitName, col1X, yPos);
     
-    // Target with fixed width
+    // Target with truncation
     fill(255, 165, 0);
-    text(exploit.target, col2X, yPos);
+    let target = exploit.target;
+    if (textWidth(target) > 70) {
+      target = target.substring(0, 8) + "..";
+    }
+    text(target, col2X, yPos);
     
     // Status with better alignment
     let statusColor = exploit.status === "SUCCESS" ? color(0, 255, 0) :
@@ -661,34 +906,80 @@ function drawExploitFramework(x, y, w, h) {
     fill(statusColor);
     text(exploit.status, col3X, yPos);
     
-    // Progress bar with better positioning
+    // Progress bar with better positioning and animation
     if (exploit.status === "RUNNING") {
       fill(0, 50, 0);
-      rect(col4X, yPos - 8, 60, 8);
+      rect(col4X, yPos - 8, 50, 8);
+      
+      // Animated progress bar
+      let progressColor = color(0, 255, 0);
+      if (exploit.progress > 80) {
+        progressColor = color(255, 255, 0); // Yellow for near completion
+      }
+      fill(progressColor);
+      rect(col4X, yPos - 8, 50 * exploit.progress / 100, 8);
+      
+      // Progress percentage
+      fill(255, 255, 255);
+      textSize(getResponsiveTextSize(8));
+      text(floor(exploit.progress) + "%", col4X + 55, yPos);
+      
+      // Pulsing effect for running exploits
+      let pulseSize = 2 + sin(frameCount * 0.2) * 1;
+      fill(255, 255, 0, 100);
+      ellipse(col4X + 25, yPos - 4, pulseSize, pulseSize);
+    } else if (exploit.status === "SUCCESS") {
+      // Success indicator
       fill(0, 255, 0);
-      rect(col4X, yPos - 8, 60 * exploit.progress / 100, 8);
+      textSize(getResponsiveTextSize(8));
+      text("✓", col4X + 20, yPos);
+    } else if (exploit.status === "FAILED") {
+      // Failed indicator
+      fill(255, 0, 0);
+      textSize(getResponsiveTextSize(8));
+      text("✗", col4X + 20, yPos);
     }
   }
   
-  // Summary with better layout
-  fill(0, 255, 0);
-  textSize(getResponsiveTextSize(12));
-  textAlign(LEFT);
-  
-  // Summary header
-  text("EXPLOIT SUMMARY:", 15, h - 70);
-  
-  // Summary details with color coding
+  // Summary with better layout and dynamic effects
   let runningCount = exploitStatus.filter(e => e.status === "RUNNING").length;
   let successCount = exploitStatus.filter(e => e.status === "SUCCESS").length;
   let failedCount = exploitStatus.filter(e => e.status === "FAILED").length;
   
+  fill(0, 255, 0);
+  textSize(getResponsiveTextSize(12));
+  textAlign(LEFT);
+  
+  // Summary header with pulsing effect when exploits are running
+  if (runningCount > 0) {
+    let pulseIntensity = sin(frameCount * 0.15) * 30;
+    fill(0, 255 + pulseIntensity, 0);
+  } else {
+    fill(0, 255, 0);
+  }
+  text("EXPLOIT SUMMARY:", 15, h - 70);
+  
+  // Summary details with color coding and dynamic counters
   fill(255, 165, 0);
   text("• RUNNING: " + runningCount, 25, h - 50);
   fill(0, 255, 0);
   text("• SUCCESS: " + successCount, 25, h - 35);
   fill(255, 0, 0);
   text("• FAILED: " + failedCount, 25, h - 20);
+  
+  // Success rate indicator
+  let totalExploits = exploitStatus.length;
+  let successRate = totalExploits > 0 ? (successCount / totalExploits) * 100 : 0;
+  
+  fill(0, 255, 0);
+  textSize(getResponsiveTextSize(10));
+  text("SUCCESS RATE: " + floor(successRate) + "%", 15, h - 5);
+  
+  // Visual success rate bar
+  fill(0, 50, 0);
+  rect(w - 120, h - 15, 100, 8);
+  fill(0, 255, 0);
+  rect(w - 120, h - 15, 100 * successRate / 100, 8);
   
   pop();
 }
@@ -745,4 +1036,44 @@ function generateTerminalCommand() {
     "nikto -h http://target.com"
   ];
   return "root@nexus:~# " + random(commands);
+}
+
+function drawGlobalAttackIndicator() {
+  push();
+  
+  // Semi-transparent overlay
+  fill(0, 0, 0, 100);
+  rect(0, 0, width, height);
+  
+  // Central attack status
+  fill(255, 0, 0);
+  textSize(getResponsiveTextSize(24));
+  textAlign(CENTER);
+  text("ATTACK IN PROGRESS", width/2, height/2 - 50);
+  
+  // Current target
+  fill(255, 255, 0);
+  textSize(getResponsiveTextSize(18));
+  text("TARGET: " + (attackSequence.currentTarget || "NONE"), width/2, height/2 - 20);
+  
+  // Phase indicator
+  let phaseNames = ["TARGET_SELECTION", "TERMINAL_COMMAND", "NETWORK_HIGHLIGHT", "VULNERABILITY_SCAN", "EXPLOIT_EXECUTION"];
+  fill(0, 255, 0);
+  textSize(getResponsiveTextSize(16));
+  text("PHASE: " + phaseNames[attackSequence.currentPhase], width/2, height/2 + 10);
+  
+  // Progress bar
+  let phaseProgress = (attackSequence.phaseTimer / attackSequence.phaseDuration) * 100;
+  fill(0, 50, 0);
+  rect(width/2 - 150, height/2 + 30, 300, 20);
+  fill(255, 255, 0);
+  rect(width/2 - 150, height/2 + 30, 300 * phaseProgress / 100, 20);
+  
+  // Progress percentage
+  fill(255, 255, 255);
+  textSize(getResponsiveTextSize(14));
+  text(floor(phaseProgress) + "%", width/2, height/2 + 45);
+  
+  textAlign(LEFT);
+  pop();
 }
