@@ -1,0 +1,74 @@
+#!/bin/bash
+
+# Launch the hacker terminal demo as a fullscreen Omarchy screensaver on every
+# monitor. Windows use the org.omarchy.screensaver class so Omarchy's fullscreen
+# rule and idle/lock tracking treat them exactly like the stock screensaver.
+# Dismissing any one window closes them all.
+
+APP_DIR="$(cd "$(dirname "$(readlink -f "$0")")/.." && pwd)"
+URL="file://$APP_DIR/index.html?screensaver"
+PROFILE_ROOT="${XDG_RUNTIME_DIR:-/tmp}/hacker-screensaver"
+CLASS=org.omarchy.screensaver
+
+# Exit early if a screensaver is already running
+hyprctl clients -j | jq -e --arg c "$CLASS" 'any(.[]; .class == $c)' >/dev/null && exit 0
+
+# Respect Omarchy's screensaver toggle, but allow forcing it on
+if omarchy-toggle-enabled screensaver-off && [[ $1 != "force" ]]; then
+  exit 1
+fi
+
+hypr_focus_monitor() {
+  hyprctl dispatch "hl.dsp.focus({ monitor = \"$1\" })" >/dev/null 2>&1 || hyprctl dispatch focusmonitor "$1" >/dev/null
+}
+
+SOCKET="$XDG_RUNTIME_DIR/hypr/$HYPRLAND_INSTANCE_SIGNATURE/.socket2.sock"
+
+# Listen to Hyprland events before spawning, so each window is seen mapping on
+# its monitor before focus moves on to the next one.
+exec {events}< <(socat -U - "UNIX-CONNECT:$SOCKET" 2>/dev/null)
+
+wait_for_screensaver_window() {
+  local line deadline=$((SECONDS + 10))
+  while ((SECONDS < deadline)) && IFS= read -r -t $((deadline - SECONDS)) -u "$events" line; do
+    [[ $line == openwindow\>\>*,$CLASS,* ]] && return 0
+  done
+}
+
+pids=()
+
+cleanup() {
+  kill "${pids[@]}" 2>/dev/null
+  wait 2>/dev/null
+  rm -rf "$PROFILE_ROOT"
+}
+trap cleanup EXIT
+trap 'exit 0' SIGINT SIGTERM SIGHUP
+
+focused=$(omarchy-hyprland-monitor-focused)
+
+for m in $(hyprctl monitors -j | jq -r '.[] | .name'); do
+  hypr_focus_monitor "$m"
+
+  chromium \
+    --user-data-dir="$PROFILE_ROOT/$m" \
+    --class="$CLASS" \
+    --kiosk \
+    --incognito \
+    --no-first-run \
+    --no-default-browser-check \
+    --noerrdialogs \
+    --disable-session-crashed-bubble \
+    --disable-translate \
+    --autoplay-policy=no-user-gesture-required \
+    "$URL" >/dev/null 2>&1 &
+  pids+=($!)
+
+  wait_for_screensaver_window
+done
+
+hypr_focus_monitor "$focused"
+exec {events}<&-
+
+# When any screensaver window is dismissed, close the rest (cleanup trap)
+wait -n "${pids[@]}"
